@@ -1,0 +1,15 @@
+litellm==1.80.16
+google-adk[a2a]==1.19.0
+a2a-sdk[http-server]==0.3.16
+mcp==1.19.0
+agent-framework==1.0.0b251120
+agent-framework-a2a==1.0.0b251120
+langchain-mcp-adapters==0.1.11
+langgraph==1.0.2
+langchain==1.0.2
+langchain_litellm
+beeai-framework[a2a]==0.1.70
+nest_asyncio
+ipython
+python-dotenv
+langgraph-a2a-server==0.1.6
