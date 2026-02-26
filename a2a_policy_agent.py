@@ -30,7 +30,7 @@ from a2a.server.apps import A2AStarletteApplication
 
 # 3. EventQueue:
 #    - When your agent finishes thinking and generates an answer, it doesn't just "return" it.
-#    - It places the answer into an EventQueue. Imagine this as an "Outbox" where messages wait 
+#    - It places the answer into an EventQueue. Imagine this as an "Outbox" where messages wait
 #      to be delivered back over the network to whoever asked the question.
 from a2a.server.events import EventQueue
 
