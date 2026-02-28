@@ -1,3 +1,14 @@
+"""
+Healthcare Agent (The Orchestrator / "Head Doctor")
+---------------------------------------------------
+This acts as the "boss" agent. It interacts with the user, but it doesn't 
+actually know the answers itself. Instead, it figures out which sub-agents 
+have the right skills to answer the question, delegates the work to them, 
+and then summarizes everything for the user.
+
+It uses the BeeAI Framework to manage this routing logic.
+"""
+
 import asyncio
 import os
 from typing import Any
@@ -6,6 +17,7 @@ from beeai_framework.adapters.a2a.agents import A2AAgent
 from beeai_framework.adapters.a2a.serve.server import A2AServer, A2AServerConfig
 from beeai_framework.adapters.gemini import GeminiChatModel
 from beeai_framework.adapters.vertexai import VertexAIChatModel  # noqa: F401
+# The RequirementAgent is a type of agent that enforces rules (requirements) before answering.
 from beeai_framework.agents.requirement import RequirementAgent
 from beeai_framework.agents.requirement.requirements.conditional import (
     ConditionalRequirement,
@@ -14,13 +26,15 @@ from beeai_framework.memory import UnconstrainedMemory
 from beeai_framework.middleware.trajectory import EventMeta, GlobalTrajectoryMiddleware
 from beeai_framework.serve.utils import LRUMemoryManager
 from beeai_framework.tools import Tool
+# HandoffTool is what allows an agent to pass a question to ANOTHER agent
 from beeai_framework.tools.handoff import HandoffTool
+# ThinkTool allows the agent to privately reason about its plan before acting
 from beeai_framework.tools.think import ThinkTool
 
 from helpers import setup_env
 
 
-# Log only tool calls
+# Log only tool calls (hides messy internal thinking from the terminal)
 class ConciseGlobalTrajectoryMiddleware(GlobalTrajectoryMiddleware):
     def _format_prefix(self, meta: EventMeta) -> str:
         prefix = super()._format_prefix(meta)
@@ -43,6 +57,9 @@ def main() -> None:
     # Log only tool calls
     GlobalTrajectoryMiddleware(target=[Tool])
 
+    # 1. CONNECT TO THE EMPLOYEES (Sub-Agents)
+    # The orchestrator reads the "Agent Cards" of the 3 sub-agents running on different ports.
+    # If any of these aren't running, this startup will crash!
     policy_agent = A2AAgent(
         url=f"http://{host}:{policy_agent_port}", memory=UnconstrainedMemory()
     )
@@ -62,6 +79,8 @@ def main() -> None:
     asyncio.run(provider_agent.check_agent_exists())
     print("\tℹ️", f"{provider_agent.name} initialized")
 
+
+    # 2. CREATE THE ORCHESTRATOR
     healthcare_agent = RequirementAgent(
         name="Healthcare Agent",
         description="A personal concierge for Healthcare Information, customized to your policy.",
@@ -76,6 +95,9 @@ def main() -> None:
         #    location="global",
         #    allow_parallel_tool_calls=True,
         # ),
+        
+        # 3. DEFINE THE TOOLS
+        # Tools here are actually just "Handoffs" to the sub-agents.
         tools=[
             thinktool := ThinkTool(),
             policy_tool := HandoffTool(
@@ -94,6 +116,10 @@ def main() -> None:
                 description=provider_agent.agent_card.description,
             ),
         ],
+        
+        # 4. DEFINE THE RULES (Requirements)
+        # This forces the agent to use its 'ThinkTool' first to plan its strategy.
+        # It also prevents it from looping/calling the same sub-agent over and over.
         requirements=[
             ConditionalRequirement(
                 thinktool,
@@ -118,6 +144,9 @@ def main() -> None:
             ),
         ],
         role="Healthcare Concierge",
+        
+        # 5. BUSINESS RULES
+        # Strict instructions on how the agent should compile the final answer.
         instructions=(
             f"""You are a concierge for healthcare services. Your task is to handoff to one or more agents to answer questions and provide a detailed summary of their answers. Be sure that all of their questions are answered before responding.
 
@@ -129,6 +158,7 @@ def main() -> None:
 
     print("\tℹ️", f"{healthcare_agent.meta.name} initialized")
 
+    # 6. START THE SERVER
     # Register the agent with the A2A server and run the HTTP server
     # we use LRU memory manager to keep limited amount of sessions in the memory
     A2AServer(
